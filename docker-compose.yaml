@@ -10,15 +10,25 @@ x-airflow-common:
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: 10
+    # ClearML Integration
+    CLEARML_API_HOST: ${CLEARML_API_HOST}
+    CLEARML_WEB_HOST: ${CLEARML_WEB_HOST}
+    CLEARML_FILES_HOST: ${CLEARML_FILES_HOST}
+    CLEARML_API_ACCESS_KEY: ${CLEARML_API_ACCESS_KEY}
+    CLEARML_API_SECRET_KEY: ${CLEARML_API_SECRET_KEY}
+    CLEARML_PROJECT_NAME: ${CLEARML_PROJECT_NAME}
+    CLEARML_TASK_NAME: ${CLEARML_TASK_NAME}
+
     PYTHONPATH: /opt/airflow/scripts:/opt/airflow/dags:${PYTHONPATH}
   volumes:
     - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
+    - ./logs:/opt/airflow/logs:z
     - ./plugins:/opt/airflow/plugins
     - ./dataset:/opt/airflow/dataset
     - ./scripts:/opt/airflow/scripts
+    - ./models:/opt/airflow/models
     - .:/app
-  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-50000}"
+  user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:
     postgres:
       condition: service_healthy
