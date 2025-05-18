@@ -1,27 +1,22 @@
 # main.py
 
 from scripts.clearml_init import init_clearml_from_env
-from models.logistic_regression_model import LogisticRegressionModel
-from models.config import config
-from dataset.digits_data_processor import DigitsDataProcessor
-
+from models.linear_regression_model import LinearRegressionModel
 from typing import Dict, Any
-
-from scripts.clearml_init import init_clearml_from_env
 from models.config import config
+from scripts.data_proccessor.wine_data_processor import WineQualityDataProcessor
 
 
 def train_model(model_class, model_config_key: str) -> Dict[str, Any]:
     """Обучает модель и возвращает её метрики"""
-    from dataset.digits_data_processor import DigitsDataProcessor
 
     try:
         # Инициализируем ClearML задачу
-        task = init_clearml_from_env(model_class)
+        task = init_clearml_from_env(project_name="WineQuality")
         task.set_parameter("model_type", model_config_key)
 
         # Подготовка данных
-        data_processor = DigitsDataProcessor(
+        data_processor = WineQualityDataProcessor(
             test_size=config["data"]["test_size"], random_state=config["random_state"]
         )
 
@@ -56,7 +51,7 @@ def deploy_best_model(**context) -> str:
     """Деплоит лучшую модель через ClearML"""
     from clearml import Model
 
-    task = init_clearml_from_env("Serving best model")
+    task = init_clearml_from_env(project_name="WineQuality")
     task.set_parameter("model_type", "serving")
 
     try:
@@ -95,6 +90,10 @@ def deploy_best_model(**context) -> str:
 
 if __name__ == "__main__":
 
-    train_dt = train_model(model_class="SVMModel", model_config_key="svm")
+    train_lr = train_model(
+        model_class="LinearRegressionModel", model_config_key="linear_regression"
+    )
 
-    deploy = deploy_best_model(provide_context=True)
+    train_lr = train_model(
+        model_class="RandomForestModel", model_config_key="random_forest"
+    )

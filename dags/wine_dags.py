@@ -1,4 +1,4 @@
-# digits_dag.py
+# wine_quality_dag.py
 from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
@@ -9,8 +9,7 @@ import os
 # Добавляем пути для импорта
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from scripts.clearml_init import init_clearml_from_env
-from scripts.data_proccessor.digits_data_processor import DigitsDataProcessor
-
+from scripts.data_proccessor.wine_data_processor import WineQualityDataProcessor
 from models.config import config
 
 default_args = {
@@ -24,7 +23,7 @@ default_args = {
 
 def verify_clearml_connection():
     try:
-        task = init_clearml_from_env(project_name="Digits Classification")
+        task = init_clearml_from_env(project_name="WineQuality")
         task.close()
         print("ClearML подключен успешно!")
         return True
@@ -39,9 +38,10 @@ def train_model(model_class, model_config_key: str) -> Dict[str, Any]:
         # Инициализируем ClearML задачу
         task = init_clearml_from_env(model_class)
         task.set_parameter("model_type", model_config_key)
+        task.set_parameter("dataset", "wine_quality")
 
         # Подготовка данных
-        data_processor = DigitsDataProcessor(
+        data_processor = WineQualityDataProcessor(
             test_size=config["data"]["test_size"], random_state=config["random_state"]
         )
 
@@ -78,24 +78,27 @@ def deploy_best_model(**context) -> str:
 
     task = init_clearml_from_env()
     task.set_parameter("model_type", "serving")
+    task.set_parameter("dataset", "wine_quality")
 
     try:
         # Получаем результаты всех задач
         models_data = context["ti"].xcom_pull(
-            task_ids=["train_lr", "train_dt", "train_svm", "train_xgb"]
+            task_ids=["train_lr", "train_rf", "train_svm", "train_xgb"]
         )
 
         if not models_data or not all(models_data):
             raise ValueError("Нет данных о моделях для деплоя")
 
-        # Выбираем лучшую модель по F1-score
-        best_model = max(models_data, key=lambda x: x["metrics"].get("f1", 0))
+        # Для регрессии выбираем лучшую модель по R2 score или MSE
+        best_model = min(
+            models_data, key=lambda x: x["metrics"].get("mse", float("inf"))
+        )
 
         # Деплой модели
         model = Model(model_id=best_model["model_id"])
         serving_instance = model.deploy(
             engine="python",
-            serving_service_name=f"digits-{best_model['model_name']}",
+            serving_service_name=f"wine-quality-{best_model['model_name']}",
             endpoint="/predict",
         )
 
@@ -114,9 +117,9 @@ def deploy_best_model(**context) -> str:
 
 
 with DAG(
-    "digits_classification_pipeline",
+    "wine_quality_regression_pipeline",
     default_args=default_args,
-    description="Обучение и деплой моделей для классификации цифр",
+    description="Обучение и деплой моделей для предсказания качества вина",
     schedule_interval=None,
     catchup=False,
 ) as dag:
@@ -129,17 +132,17 @@ with DAG(
         task_id="train_lr",
         python_callable=train_model,
         op_kwargs={
-            "model_class": "LogisticRegressionModel",
-            "model_config_key": "logistic_regression",
+            "model_class": "LinearRegressionModel",
+            "model_config_key": "linear_regression",
         },
     )
 
-    train_dt = PythonOperator(
-        task_id="train_dt",
+    train_rf = PythonOperator(
+        task_id="train_rf",
         python_callable=train_model,
         op_kwargs={
-            "model_class": "DecisionTreeModel",
-            "model_config_key": "decision_tree",
+            "model_class": "RandomForestModel",
+            "model_config_key": "random_forest",
         },
     )
 
@@ -167,4 +170,4 @@ with DAG(
         provide_context=True,
     )
 
-    verify_connection >> [train_lr, train_dt, train_svm, train_xgb] >> deploy
+    verify_connection >> [train_lr, train_rf, train_svm, train_xgb] >> deploy
