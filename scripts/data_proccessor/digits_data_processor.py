@@ -1,7 +1,7 @@
 from sklearn.datasets import load_digits
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
-from dataset.data_processor_base import DataProcessor
+from scripts.data_proccessor.data_processor_base import DataProcessor
 
 
 class DigitsDataProcessor(DataProcessor):

@@ -4,9 +4,9 @@ import os
 from clearml import Task
 
 
-def init_clearml_from_env(task_name="MyClassifier"):
+def init_clearml_from_env(project_name="WineQuality", task_name="train"):
 
-    project_name = os.getenv("CLEARML_PROJECT_NAME", "Digits Classification")
+    project_name = project_name
     # task_name = os.getenv("CLEARML_TASK_NAME", "MyClassifier")
     task_type = os.getenv("CLEARML_TASK_TYPE", "training")
 
