@@ -9,3 +9,5 @@ optuna==4.3.0
 matplotlib==3.7.5
 seaborn==0.13.2
 xgboost == 2.1.4
+dvc
+dvc-s3

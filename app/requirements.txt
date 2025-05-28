@@ -1,0 +1,7 @@
+streamlit~=1.31.1
+uvicorn==0.34.2
+fastapi==0.115.12
+pydantic
+dvc==3.59.2
+dvc-s3==
+joblib==1.5.0

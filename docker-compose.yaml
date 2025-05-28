@@ -27,6 +27,7 @@ x-airflow-common:
     - ./dataset:/opt/airflow/dataset
     - ./scripts:/opt/airflow/scripts
     - ./models:/opt/airflow/models
+    - ./.dvc:/opt/airflow/.dvc/
     - .:/app
   user: "${AIRFLOW_UID:-50000}:${AIRFLOW_GID:-0}"
   depends_on:

@@ -6,6 +6,8 @@ from typing import Dict, Any
 import sys
 import os
 
+import joblib
+
 # Добавляем пути для импорта
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from scripts.clearml_init import init_clearml_from_env
@@ -73,8 +75,11 @@ def train_model(model_class, model_config_key: str) -> Dict[str, Any]:
 
 
 def deploy_best_model(**context) -> str:
-    """Деплоит лучшую модель через ClearML"""
+    """Деплоит лучшую модель через ClearML и сохраняет её в S3 через DVC"""
     from clearml import Model
+    import joblib
+    import os
+    import subprocess
 
     task = init_clearml_from_env()
     task.set_parameter("model_type", "serving")
@@ -89,13 +94,63 @@ def deploy_best_model(**context) -> str:
         if not models_data or not all(models_data):
             raise ValueError("Нет данных о моделях для деплоя")
 
-        # Для регрессии выбираем лучшую модель по R2 score или MSE
+        # Выбираем лучшую модель по MSE
         best_model = min(
             models_data, key=lambda x: x["metrics"].get("mse", float("inf"))
         )
 
-        # Деплой модели
+        # Получаем модель из ClearML
         model = Model(model_id=best_model["model_id"])
+        model_path = model.get_local_copy()
+
+        # Подготовка пути для сохранения
+        dvc_root = "/opt/airflow/dvc"
+        model_dir = os.path.join(dvc_root, "models")
+        os.makedirs(model_dir, exist_ok=True)
+
+        # Формируем имя файла модели
+        model_filename = f"wine_quality_model.pkl"
+        local_model_path = os.path.join(model_dir, model_filename)
+
+        # Копируем модель в DVC директорию
+        import shutil
+
+        shutil.copy(model_path, local_model_path)
+
+        # Добавляем модель в DVC и пушим в S3
+        def run_dvc_command(cmd, cwd):
+            result = subprocess.run(
+                cmd.split(),
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise RuntimeError(f"DVC command failed: {cmd}\nError: {result.stderr}")
+
+        original_dir = os.getcwd()
+        os.chdir(dvc_root)
+
+        try:
+            # Добавляем модель в DVC
+            run_dvc_command(f"dvc add {local_model_path}", dvc_root)
+
+            # Пушим в S3
+            run_dvc_command("dvc push", dvc_root)
+
+            # Коммитим изменения .dvc файла (если используется git)
+            if os.path.exists(".git"):
+                run_dvc_command(f"git add {local_model_path}.dvc", dvc_root)
+                run_dvc_command(
+                    f"git commit -m 'Add best model: {best_model['model_name']}'",
+                    dvc_root,
+                )
+                run_dvc_command("git push", dvc_root)
+        finally:
+            os.chdir(original_dir)
+
+        # Деплой модели ClearML
         serving_instance = model.deploy(
             engine="python",
             serving_service_name=f"wine-quality-{best_model['model_name']}",
@@ -106,7 +161,8 @@ def deploy_best_model(**context) -> str:
             f"Деплой успешен! Модель: {best_model['model_name']}\n"
             f"Service ID: {serving_instance.id}\n"
             f"Endpoint: {serving_instance.endpoint}\n"
-            f"Метрики: {best_model['metrics']}"
+            f"Метрики: {best_model['metrics']}\n"
+            f"Модель сохранена в S3: {local_model_path}"
         )
 
         return serving_instance.id
